@@ -4,16 +4,17 @@
 // https://github.com/ejeklint/ArduinoWebsocketServer
 // commit 6fba6d1 (15 Jan 2015)
 
-// #include <SD.h>
+// #include <SD.h> // not for Arduino Duemilanove
 #include <WebSocket.h>
 
 byte mac[] = { 0x52, 0x4F, 0x43, 0x4B, 0x45, 0x54 };
 byte ip[] = { 192, 168, 113, 177 };
 volatile boolean trigger = false;
-boolean ack = false;
-long int tAck;
+boolean ack = false; // ack waiting
+boolean ackReceived = true; // ack received 
+long int tAck; //Ack received timestamp
 
-//File dataFile;
+// File dataFile;
 
 // Create a Websocket server
 WebSocketServer wsServer;
@@ -22,6 +23,11 @@ WebSocketServer wsServer;
 void onData(WebSocket &socket, char* dataString, byte frameLength) {  
   ack = true;
   tAck = millis();
+}
+
+void onDisconnect(WebSocket &socket) {
+  tAck=0; //triggers cycle break
+  Serial.println("onDisconnect called");
 }
 
 void setup() {
@@ -33,8 +39,7 @@ void setup() {
     return;
   }
   Serial.println("SD unit initialization done.");
- 
- dataFile = SD.open("data.txt", FILE_WRITE);
+  dataFile = SD.open("data.txt", FILE_WRITE);
   if (dataFile) {
     dataFile.println("*** Start new log");
     dataFile.close();
@@ -42,12 +47,13 @@ void setup() {
     // if the file didn't open, print an error:
     Serial.println("SD write error!");
   }
-  */
-
+*/
+  // Initialize Ethernet  
   Ethernet.begin(mac, ip);
-
+  // Initialize WebSocket
   // when a new frame is received
   wsServer.registerDataCallback(&onData);
+  wsServer.registerDisconnectCallback(&onDisconnect);
   wsServer.begin();
   // Give time to stabilize 
   delay(100);
@@ -75,6 +81,7 @@ SIGNAL(TIMER1_COMPA_vect)
 void loop() {
   long int t0;
   long int t1;
+  char buffer[20];
   // Wait for a connection
   wsServer.listen();
   // Give time to stabilize
@@ -83,22 +90,29 @@ void loop() {
   while (wsServer.connectionCount() > 0) {
       // See if it's time to send data
       if ( trigger ) {
+        // if no Ack of previous msg close connection
+        if ( ackReceived=false ) {
+          Serial.println("No ack, restarting");
+          break;
+        }
         t0=millis();
         t1=0;
         String msg=String(t0/1000.0,3);
-        byte buffer[msg.length()];
-        msg.getBytes(buffer, msg.length()+1);
+        msg.toCharArray(buffer, msg.length()+1);
         wsServer.send(buffer, msg.length()+1);
         t1=millis();
-        Serial.println(msg);
-        Serial.println(t1-t0);
+        Serial.print(msg);
+        Serial.print("\t");
+        Serial.print(t1-t0);
+        ackReceived=false;
         trigger = false;
       }
       // See if a frame arrived
       wsServer.listen();
       if ( ack ) {
-        Serial.print("Ack received at ");
+        Serial.print("\t");
         Serial.println(tAck-t0);
+        ackReceived=true;
         ack = false;
       }
       // This is the grain of RTT
