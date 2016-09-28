@@ -9,7 +9,13 @@
 
 byte mac[] = { 0x52, 0x4F, 0x43, 0x4B, 0x45, 0x54 };
 byte ip[] = { 192, 168, 113, 177 };
+// sensor Pin
+int sensorPin = A0;
+// measurement time
+long int t0;
+// Timer driven trigger for measurements
 volatile boolean trigger = false;
+// Ping protocol variables
 boolean ack = false; // ack waiting
 boolean ackReceived = true; // ack received 
 long int tAck; //Ack received timestamp
@@ -69,7 +75,7 @@ void setup() {
   TIMSK1 |= (1 << OCIE1A);  // enable timer compare interrupt
   interrupts();             // enable all interrupts
   // finished with timer1
-  Serial.println("Setup finished");
+  Serial.println("Setup complete");
 }
 
 // This is the timer interrupt handler
@@ -78,10 +84,21 @@ SIGNAL(TIMER1_COMPA_vect)
     trigger=true;
 }
 
+int measure(char* buffer){
+  int i=0;
+  t0=millis(); //record when measurement done
+  dtostrf(t0/1000.0,-1,3,buffer);
+  while (buffer[i] != '\0' && i < 80 ) i++;
+  buffer[i++]='\t';
+  itoa(analogRead(A0),buffer+i,10);
+  while (buffer[i] != '\0' && i < 80 ) i++;
+  return i;
+}
+
 void loop() {
-  long int t0;
   long int t1;
-  char buffer[20];
+  int msglen;
+  char buffer[80];
   // Wait for a connection
   wsServer.listen();
   // Give time to stabilize
@@ -95,17 +112,16 @@ void loop() {
           Serial.println("No ack, restarting");
           break;
         }
-        t0=millis();
-        t1=0;
-        String msg=String(t0/1000.0,3);
-        msg.toCharArray(buffer, msg.length()+1);
-        wsServer.send(buffer, msg.length()+1);
-        t1=millis();
-        Serial.print(msg);
+        msglen=measure(buffer);
+        wsServer.send(buffer, msglen);
+        t1=millis(); // record time when send returns
+        Serial.print(buffer);
         Serial.print("\t");
-        Serial.print(t1-t0);
+        Serial.print(t1-t0); // approx measurement latency (local)
+        // Prepare ping protocol
         ackReceived=false;
         trigger = false;
+        delay(10);
       }
       // See if a frame arrived
       wsServer.listen();
@@ -114,6 +130,7 @@ void loop() {
         Serial.println(tAck-t0);
         ackReceived=true;
         ack = false;
+        delay(10);
       }
       // This is the grain of RTT
       delay(10);
