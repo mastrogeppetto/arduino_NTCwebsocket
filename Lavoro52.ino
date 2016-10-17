@@ -15,6 +15,8 @@ int sensorPin = A0;
 long int t0;
 // Timer driven trigger for measurements
 volatile boolean trigger = false;
+// Connection established
+boolean isConnected=0;
 // Ping protocol variables
 boolean ack = false; // ack waiting
 boolean ackReceived = true; // ack received 
@@ -32,7 +34,7 @@ void onData(WebSocket &socket, char* dataString, byte frameLength) {
 }
 
 void onDisconnect(WebSocket &socket) {
-  tAck=0; //triggers cycle break
+  isConnected = false; //triggers cycle break
   Serial.println("onDisconnect called");
 }
 
@@ -101,10 +103,12 @@ void loop() {
   char buffer[80];
   // Wait for a connection
   wsServer.listen();
+  isConnected = true;
   // Give time to stabilize
   delay(100);
   // Loop until connection closed
   while (wsServer.connectionCount() > 0) {
+//  while ( isConnected ) {
       // See if it's time to send data
       if ( trigger ) {
         // if no Ack of previous msg close connection
