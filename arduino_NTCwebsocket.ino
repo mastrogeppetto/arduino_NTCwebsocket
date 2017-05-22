@@ -5,6 +5,7 @@
 // commit 6fba6d1 (15 Jan 2015)
 
 // #include <SD.h> // not for Arduino Duemilanove
+#include <Ethernet.h>
 #include <WebSocket.h>
 
 byte mac[] = { 0x52, 0x4F, 0x43, 0x4B, 0x45, 0x54 };
@@ -40,6 +41,7 @@ void onDisconnect(WebSocket &socket) {
 
 void setup() {
   Serial.begin(57600);
+  Serial.println("Hallo!!");
 /*    
   SD.begin();
   if (!SD.begin(4)) {
