@@ -22,6 +22,7 @@ boolean isConnected=0;
 boolean ack = false; // ack waiting
 boolean ackReceived = true; // ack received 
 long int tAck; //Ack received timestamp
+char buffer[80];
 
 // File dataFile;
 
@@ -63,7 +64,7 @@ void setup() {
   // Initialize WebSocket
   // when a new frame is received
   wsServer.registerDataCallback(&onData);
-  wsServer.registerDisconnectCallback(&onDisconnect);
+//  wsServer.registerDisconnectCallback(&onDisconnect);
   wsServer.begin();
   // Give time to stabilize 
   delay(100);
@@ -88,21 +89,21 @@ SIGNAL(TIMER1_COMPA_vect)
     trigger=true;
 }
 
-int measure(char* buffer){
+int measure(){
   int i=0;
+  char a[16];
   t0=millis(); //record when measurement done
-  dtostrf(t0/1000.0,-1,3,buffer);
-  while (buffer[i] != '\0' && i < 80 ) i++;
-  buffer[i++]='\t';
-  itoa(analogRead(A0),buffer+i,10);
-  while (buffer[i] != '\0' && i < 80 ) i++;
-  return i;
+  dtostrf(t0/1000.0,-1,3,a);
+  strcpy(buffer,a);
+  strcat(buffer,"\t");
+  itoa(analogRead(A0),a,10);
+  strcat(buffer,a);
+  return strlen(buffer);
 }
 
 void loop() {
   long int t1;
   int msglen;
-  char buffer[80];
   // Wait for a connection
   wsServer.listen();
   isConnected = true;
@@ -115,10 +116,10 @@ void loop() {
       if ( trigger ) {
         // if no Ack of previous msg close connection
         if ( ackReceived=false ) {
-          Serial.println("No ack, restarting");
-          break;
+          Serial.println("\tNo ack");
+//          break;
         }
-        msglen=measure(buffer);
+        msglen=measure();
         wsServer.send(buffer, msglen);
         t1=millis(); // record time when send returns
         Serial.print(buffer);
@@ -127,17 +128,18 @@ void loop() {
         // Prepare ping protocol
         ackReceived=false;
         trigger = false;
-        delay(10);
+//        delay(10);
       }
       // See if a frame arrived
       wsServer.listen();
       if ( ack ) {
         Serial.print("\t");
-        Serial.println(tAck-t0);
+        Serial.print(tAck-t0);
         ackReceived=true;
         ack = false;
-        delay(10);
-      }
+        Serial.println();
+//        delay(10);
+      } 
       // This is the grain of RTT
       delay(10);
   }
