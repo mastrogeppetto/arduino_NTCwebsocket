@@ -16,10 +16,7 @@ int sensorPin = A0;
 long int t0;
 // Timer driven trigger for measurements
 volatile boolean trigger = false;
-// Connection established
-boolean isConnected=0;
 // Ping protocol variables
-boolean ack = false; // ack waiting
 boolean ackReceived = true; // ack received 
 long int tAck; //Ack received timestamp
 char buffer[80];
@@ -31,40 +28,30 @@ WebSocketServer wsServer;
 
 // callback when data received
 void onData(WebSocket &socket, char* dataString, byte frameLength) {  
-  ack = true;
-  tAck = millis();
+  // Only ack messages are received...
+  ackReceived=true;
+  Serial.print("\t");
+  Serial.println(millis()-t0);
 }
 
 void onDisconnect(WebSocket &socket) {
-  isConnected = false; //triggers cycle break
   Serial.println("onDisconnect called");
+}
+
+void onConnect(WebSocket &socket) {
+  Serial.println("onConnect called");
 }
 
 void setup() {
   Serial.begin(57600);
   Serial.println("Hallo!!");
-/*    
-  SD.begin();
-  if (!SD.begin(4)) {
-    Serial.println("SD unit initialization failed!");
-    return;
-  }
-  Serial.println("SD unit initialization done.");
-  dataFile = SD.open("data.txt", FILE_WRITE);
-  if (dataFile) {
-    dataFile.println("*** Start new log");
-    dataFile.close();
-  } else {
-    // if the file didn't open, print an error:
-    Serial.println("SD write error!");
-  }
-*/
   // Initialize Ethernet  
   Ethernet.begin(mac, ip);
   // Initialize WebSocket
   // when a new frame is received
   wsServer.registerDataCallback(&onData);
-//  wsServer.registerDisconnectCallback(&onDisconnect);
+  wsServer.registerDisconnectCallback(&onDisconnect);
+  wsServer.registerConnectCallback(&onConnect);
   wsServer.begin();
   // Give time to stabilize 
   delay(100);
@@ -105,19 +92,17 @@ void loop() {
   long int t1;
   int msglen;
   // Wait for a connection
+  // See if a frame arrived
   wsServer.listen();
-  isConnected = true;
   // Give time to stabilize
-  delay(100);
-  // Loop until connection closed
-  while (wsServer.connectionCount() > 0) {
-//  while ( isConnected ) {
+  delay(10); // !!!! Granularity of RTT
+  // In case there are connections
+  if (wsServer.connectionCount() > 0) {
       // See if it's time to send data
       if ( trigger ) {
         // if no Ack of previous msg close connection
-        if ( ackReceived=false ) {
+        if ( ackReceived==false ) {
           Serial.println("\tNo ack");
-//          break;
         }
         msglen=measure();
         wsServer.send(buffer, msglen);
@@ -128,19 +113,6 @@ void loop() {
         // Prepare ping protocol
         ackReceived=false;
         trigger = false;
-//        delay(10);
       }
-      // See if a frame arrived
-      wsServer.listen();
-      if ( ack ) {
-        Serial.print("\t");
-        Serial.print(tAck-t0);
-        ackReceived=true;
-        ack = false;
-        Serial.println();
-//        delay(10);
-      } 
-      // This is the grain of RTT
-      delay(10);
   }
 }
