@@ -17,7 +17,7 @@ long int t0;
 // Timer driven trigger for measurements
 volatile boolean trigger = false;
 // Ping protocol variables
-boolean ackReceived = true; // ack received 
+boolean ackPending = false; // waiting for an ack
 long int tAck; //Ack received timestamp
 char buffer[80];
 
@@ -29,13 +29,13 @@ WebSocketServer wsServer;
 // callback when data received
 void onData(WebSocket &socket, char* dataString, byte frameLength) {  
   // Only ack messages are received...
-  ackReceived=true;
-  Serial.print("\t");
+  ackPending=false;
   Serial.println(millis()-t0);
 }
 
 void onDisconnect(WebSocket &socket) {
   Serial.println("onDisconnect called");
+  ackPending=false;
 }
 
 void onConnect(WebSocket &socket) {
@@ -43,7 +43,7 @@ void onConnect(WebSocket &socket) {
 }
 
 void setup() {
-  Serial.begin(57600);
+  Serial.begin(115200);
   Serial.println("Hallo!!");
   // Initialize Ethernet  
   Ethernet.begin(mac, ip);
@@ -96,23 +96,20 @@ void loop() {
   wsServer.listen();
   // Give time to stabilize
   delay(10); // !!!! Granularity of RTT
-  // In case there are connections
-  if (wsServer.connectionCount() > 0) {
-      // See if it's time to send data
-      if ( trigger ) {
-        // if no Ack of previous msg close connection
-        if ( ackReceived==false ) {
-          Serial.println("\tNo ack");
+  // In case there are connections and it's time to send data
+  if (wsServer.connectionCount() > 0 && trigger) {
+        // if no Ack of previous msg 
+        if ( ackPending==true ) {
+          Serial.println("No ack");
         }
         msglen=measure();
         wsServer.send(buffer, msglen);
         t1=millis(); // record time when send returns
         Serial.print(buffer);
-        Serial.print("\t");
+        Serial.print('\t');
         Serial.print(t1-t0); // approx measurement latency (local)
-        // Prepare ping protocol
-        ackReceived=false;
-        trigger = false;
+        Serial.print('\t');
+        ackPending=true;     // waiting for an ack
+        trigger = false;     // data sent
       }
-  }
 }
